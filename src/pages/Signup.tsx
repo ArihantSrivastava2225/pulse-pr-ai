@@ -43,21 +43,25 @@ const Signup = () => {
       return;
     }
 
-    // Mock registration - In production, this would be an API call
-    setTimeout(() => {
-      const mockToken = "mock-jwt-token-" + Date.now();
-      
-      localStorage.setItem("token", mockToken);
-      localStorage.setItem("userRole", formData.role);
+    const res = await fetch("http://localhost:5000/api/auth/signup", {
+      method: "POST",
+      headers: {
+        'Content-Type': "application/json",
+      },
+      body: JSON.stringify(formData),
+    })
 
-      toast({
-        title: "Account created successfully",
-        description: "Welcome to PulsePR!",
-      });
+    const data = await res.json();
 
-      navigate(`/dashboard/${formData.role}`);
-      setLoading(false);
-    }, 1000);
+    toast({
+      title: "Signup status",
+      description: data.message,
+    })
+
+    localStorage.setItem("token", data.user.id);
+    localStorage.setItem("userRole", data.user.role);
+    navigate(`/dashboard/${formData.role}`);
+    setLoading(false);
   };
 
   return (

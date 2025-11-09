@@ -17,31 +17,26 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Mock authentication - In production, this would be an API call
-    setTimeout(() => {
-      if (email && password) {
-        // Mock token and role
-        const mockToken = "mock-jwt-token-" + Date.now();
-        const mockRole = "director"; // Default role for demo
-        
-        localStorage.setItem("token", mockToken);
-        localStorage.setItem("userRole", mockRole);
+    const res = await fetch("http://localhost:5000/api/auth/login", {
+      credentials: "include",
+      method: "POST",
+      headers: {
+        'Content-Type': "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    })
 
-        toast({
-          title: "Login successful",
-          description: "Welcome back to PulsePR!",
-        });
+    const data = await res.json();
 
-        navigate(`/dashboard/${mockRole}`);
-      } else {
-        toast({
-          title: "Login failed",
-          description: "Please enter valid credentials",
-          variant: "destructive",
-        });
-      }
-      setLoading(false);
-    }, 1000);
+    toast({
+      title: "Login status",
+      description: data.message,
+    })
+    
+    localStorage.setItem("token", data.user.id);
+    localStorage.setItem("userRole", data.user.role);
+    navigate(`/dashboard/${data.user.role}`);
+    setLoading(false);
   };
 
   return (
