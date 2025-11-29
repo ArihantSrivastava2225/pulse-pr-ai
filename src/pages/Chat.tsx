@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,26 +7,115 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Send, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { io, Socket } from "socket.io-client";
+
+interface Message {
+  _id?: string;
+  sender: {
+    _id: string;
+    name: string;
+    email: string;
+  } | string; // Handle both populated and unpopulated
+  message: string;
+  timestamp?: string;
+  room?: string;
+  isOwn?: boolean;
+}
 
 const Chat = () => {
+  const location = useLocation();
   const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [currentRoom, setCurrentRoom] = useState(location.state?.room || "general");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const chatRooms = [
-    { id: 1, name: "Team Alpha", members: 5, unread: 3, active: true },
-    { id: 2, name: "Product Launch Q1", members: 8, unread: 0, active: false },
-    { id: 3, name: "Creative Team", members: 4, unread: 7, active: false },
-  ];
+  const [chatRooms, setChatRooms] = useState([
+    { id: "general", name: "General", members: 15, unread: 0, active: true },
+  ]);
 
-  const messages = [
-    { id: 1, sender: "Sarah Johnson", message: "Has everyone reviewed the latest campaign draft?", time: "10:30 AM", isOwn: false },
-    { id: 2, sender: "You", message: "Yes, I just finished reviewing it. Looks great!", time: "10:32 AM", isOwn: true },
-    { id: 3, sender: "Mike Chen", message: "I have a few suggestions for the social media copy", time: "10:35 AM", isOwn: false },
-    { id: 4, sender: "Sarah Johnson", message: "Please share them in the next meeting", time: "10:36 AM", isOwn: false },
-  ];
+  const userId = localStorage.getItem("token"); // Assuming token stores user ID for now, or decode it
+
+  useEffect(() => {
+    fetchTeams();
+  }, []);
+
+  const fetchTeams = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/teams/my-teams", {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        const teamRooms = data.teams.map((team: any) => ({
+          id: team._id,
+          name: team.name,
+          members: team.members.length + 1, // +1 for manager
+          unread: 0,
+          active: false
+        }));
+        setChatRooms(prev => [...prev.filter(r => r.id === 'general'), ...teamRooms]);
+      }
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+    }
+  };
+
+  useEffect(() => {
+    const newSocket = io("http://localhost:5000");
+    setSocket(newSocket);
+
+    newSocket.on("connect", () => {
+      console.log("Connected to socket server");
+      newSocket.emit("join_room", currentRoom);
+    });
+
+    newSocket.on("receive_message", (data: Message) => {
+      setMessages((prev) => [...prev, data]);
+    });
+
+    // Fetch chat history
+    fetch(`http://localhost:5000/api/chat/${currentRoom}`, {
+      credentials: "include"
+    }) // You might need to add auth headers here
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setMessages(data.messages);
+        }
+      });
+
+    return () => {
+      newSocket.disconnect();
+    }
+  }, [currentRoom]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const handleSendMessage = () => {
-    if (message.trim()) {
-      console.log("Sending message:", message);
+    if (message.trim() && socket) {
+      const msgData = {
+        room: currentRoom,
+        message: message,
+        sender: userId || "Anonymous", // In a real app, backend handles sender from token
+      };
+
+      // We send to backend via API to persist, then backend emits via socket
+      // OR we emit via socket and backend persists. 
+      // Based on our controller, we post to API.
+
+      fetch("http://localhost:5000/api/chat", {
+        credentials: "include",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // "Authorization": `Bearer ${token}` // Add token if needed
+        },
+        body: JSON.stringify(msgData)
+      });
+
       setMessage("");
     }
   };
@@ -48,11 +138,11 @@ const Chat = () => {
               {chatRooms.map((room) => (
                 <div
                   key={room.id}
-                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                    room.active
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-secondary"
-                  }`}
+                  onClick={() => setCurrentRoom(room.id)}
+                  className={`p-3 rounded-lg cursor-pointer transition-colors ${currentRoom === room.id
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-secondary"
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <p className="font-medium text-sm">{room.name}</p>
@@ -76,8 +166,8 @@ const Chat = () => {
             <CardHeader className="border-b border-border">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Team Alpha</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">5 members online</p>
+                  <CardTitle>{chatRooms.find(r => r.id === currentRoom)?.name}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">Online</p>
                 </div>
                 <Button variant="outline" size="sm">
                   <Users className="w-4 h-4 mr-2" />
@@ -85,45 +175,50 @@ const Chat = () => {
                 </Button>
               </div>
             </CardHeader>
-            
+
             <CardContent className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex gap-3 ${msg.isOwn ? "flex-row-reverse" : ""}`}
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                      {msg.sender.split(" ").map((n) => n[0]).join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className={`flex-1 max-w-md ${msg.isOwn ? "text-right" : ""}`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      {!msg.isOwn && (
-                        <>
-                          <span className="text-sm font-medium">{msg.sender}</span>
-                          <span className="text-xs text-muted-foreground">{msg.time}</span>
-                        </>
-                      )}
-                      {msg.isOwn && (
-                        <>
-                          <span className="text-xs text-muted-foreground">{msg.time}</span>
-                          <span className="text-sm font-medium">{msg.sender}</span>
-                        </>
-                      )}
-                    </div>
-                    <div
-                      className={`inline-block p-3 rounded-lg ${
-                        msg.isOwn
+              {messages.map((msg, index) => {
+                const isOwn = typeof msg.sender === 'object' ? msg.sender._id === userId : msg.sender === userId;
+                const senderName = typeof msg.sender === 'object' ? msg.sender.name : "User";
+
+                return (
+                  <div
+                    key={index}
+                    className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                        {senderName[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className={`flex-1 max-w-md ${isOwn ? "text-right" : ""}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {!isOwn && (
+                          <>
+                            <span className="text-sm font-medium">{senderName}</span>
+                            <span className="text-xs text-muted-foreground">{msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ""}</span>
+                          </>
+                        )}
+                        {isOwn && (
+                          <>
+                            <span className="text-xs text-muted-foreground">{msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ""}</span>
+                            <span className="text-sm font-medium">You</span>
+                          </>
+                        )}
+                      </div>
+                      <div
+                        className={`inline-block p-3 rounded-lg ${isOwn
                           ? "bg-primary text-primary-foreground"
                           : "bg-secondary"
-                      }`}
-                    >
-                      <p className="text-sm">{msg.message}</p>
+                          }`}
+                      >
+                        <p className="text-sm">{msg.message}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
+              <div ref={messagesEndRef} />
             </CardContent>
 
             <div className="p-4 border-t border-border">

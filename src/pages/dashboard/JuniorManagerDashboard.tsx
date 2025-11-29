@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,27 @@ import { Users, MessageSquare, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+
+interface Creator {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+}
 
 const JuniorManagerDashboard = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [progress, setProgress] = useState("50");
+
+  // Team Creation State
+  const [creators, setCreators] = useState<Creator[]>([]);
+  const [teamName, setTeamName] = useState("");
+  const [description, setDescription] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
 
   const tasks = [
     { id: 1, title: "Social Media Campaign Planning", assignedBy: "Sarah", deadline: "2024-02-10", status: "in-progress" },
@@ -20,24 +38,106 @@ const JuniorManagerDashboard = () => {
     { id: 3, title: "Media Contact Outreach", assignedBy: "Sarah", deadline: "2024-02-15", status: "in-progress" },
   ];
 
-  const creators = [
-    { id: 1, name: "Alex Rivera", role: "Content Writer", available: true },
-    { id: 2, name: "Jordan Kim", role: "Graphic Designer", available: true },
-    { id: 3, name: "Taylor Swift", role: "Video Editor", available: false },
-  ];
+  useEffect(() => {
+    fetchCreators();
+  }, []);
 
-  const handleCreateTeam = () => {
-    toast({
-      title: "Team created",
-      description: "Your team has been created successfully",
+  const fetchCreators = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/teams/creators", {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCreators(data.creators);
+      } else {
+        console.error("Failed to fetch creators:", data.message);
+      }
+    } catch (error) {
+      console.error("Error fetching creators:", error);
+    }
+  };
+
+  const handleMemberToggle = (creatorId: string) => {
+    setSelectedMembers((prev) => {
+      if (prev.includes(creatorId)) {
+        return prev.filter((id) => id !== creatorId);
+      } else {
+        if (prev.length >= 5) {
+          toast({
+            title: "Limit Reached",
+            description: "You can select a maximum of 5 members.",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        return [...prev, creatorId];
+      }
     });
   };
 
+  const handleCreateTeam = async () => {
+    if (!teamName.trim()) {
+      toast({ title: "Error", description: "Team name is required", variant: "destructive" });
+      return;
+    }
+    if (selectedMembers.length === 0) {
+      toast({ title: "Error", description: "Select at least one member", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:5000/api/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: teamName,
+          description,
+          members: selectedMembers,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Team created successfully!",
+        });
+        setCreatedTeamId(data.team._id); // Store the new team ID
+        setTeamName("");
+        setDescription("");
+        setSelectedMembers([]);
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to create team",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStartChat = () => {
-    toast({
-      title: "Chat started",
-      description: "Redirecting to team chat...",
-    });
+    if (createdTeamId) {
+      navigate("/chat", { state: { room: createdTeamId } });
+    } else {
+      toast({
+        title: "No Team Selected",
+        description: "Please create a team first to start a chat.",
+        variant: "default",
+      });
+    }
   };
 
   const handleUpdateProgress = () => {
@@ -96,27 +196,50 @@ const JuniorManagerDashboard = () => {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Team Name</Label>
-                <Input placeholder="Enter team name" />
+                <Input
+                  placeholder="Enter team name"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
-                <Label>Select Creators</Label>
-                <div className="space-y-2">
-                  {creators.map((creator) => (
-                    <div key={creator.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                      <div>
-                        <p className="font-medium text-sm">{creator.name}</p>
-                        <p className="text-xs text-muted-foreground">{creator.role}</p>
+                <Label>Description</Label>
+                <Textarea
+                  placeholder="Team purpose..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Select Creators (Max 5)</Label>
+                <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-2">
+                  {creators.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center p-2">No content creators found.</p>
+                  ) : (
+                    creators.map((creator) => (
+                      <div key={creator._id} className="flex items-center space-x-2 p-2 hover:bg-secondary/20 rounded">
+                        <Checkbox
+                          id={creator._id}
+                          checked={selectedMembers.includes(creator._id)}
+                          onCheckedChange={() => handleMemberToggle(creator._id)}
+                        />
+                        <div className="flex-1">
+                          <Label htmlFor={creator._id} className="font-medium text-sm cursor-pointer block">
+                            {creator.name}
+                          </Label>
+                          <p className="text-xs text-muted-foreground">{creator.email}</p>
+                        </div>
                       </div>
-                      <Badge variant={creator.available ? "default" : "secondary"}>
-                        {creator.available ? "Available" : "Busy"}
-                      </Badge>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
+                <p className="text-xs text-muted-foreground text-right">
+                  {selectedMembers.length}/5 selected
+                </p>
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleCreateTeam} className="flex-1">
-                  Create Team
+                <Button onClick={handleCreateTeam} className="flex-1" disabled={loading}>
+                  {loading ? "Creating..." : "Create Team"}
                 </Button>
                 <Button variant="outline" onClick={handleStartChat}>
                   <MessageSquare className="w-4 h-4 mr-2" />
@@ -152,10 +275,10 @@ const JuniorManagerDashboard = () => {
               </div>
               <div className="space-y-2">
                 <Label>Progress (%)</Label>
-                <Input 
-                  type="number" 
-                  min="0" 
-                  max="100" 
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
                   value={progress}
                   onChange={(e) => setProgress(e.target.value)}
                 />

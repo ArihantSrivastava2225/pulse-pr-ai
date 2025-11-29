@@ -1,151 +1,205 @@
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarIcon, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface Event {
+  _id: string;
+  title: string;
+  description: string;
+  date: string;
+  createdBy?: {
+    name: string;
+  }
+}
 
 const Calendar = () => {
-  const events = [
-    { id: 1, title: "Product Launch Campaign", date: "2024-02-10", time: "10:00 AM", type: "campaign", priority: "high" },
-    { id: 2, title: "Team Meeting", date: "2024-02-12", time: "2:00 PM", type: "meeting", priority: "medium" },
-    { id: 3, title: "Press Release Deadline", date: "2024-02-15", time: "5:00 PM", type: "deadline", priority: "high" },
-    { id: 4, title: "Content Review", date: "2024-02-18", time: "11:00 AM", type: "review", priority: "low" },
-    { id: 5, title: "Client Presentation", date: "2024-02-20", time: "3:00 PM", type: "meeting", priority: "high" },
-  ];
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [events, setEvents] = useState<Event[]>([]);
+  const [newEvent, setNewEvent] = useState({ title: "", description: "", time: "09:00" });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
 
-  const getTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      campaign: "bg-primary/10 text-primary",
-      meeting: "bg-accent/10 text-accent",
-      deadline: "bg-destructive/10 text-destructive",
-      review: "bg-success/10 text-success",
-    };
-    return colors[type] || "bg-muted";
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/events", {
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEvents(data.events);
+      }
+    } catch (error) {
+      console.error("Failed to fetch events", error);
+    }
+  }
+
+  const handleCreateEvent = async () => {
+    if (!date || !newEvent.title) return;
+
+    const eventDate = new Date(date);
+    const [hours, minutes] = newEvent.time.split(":");
+    eventDate.setHours(parseInt(hours), parseInt(minutes));
+
+    try {
+      const res = await fetch("http://localhost:5000/api/events", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          title: newEvent.title,
+          description: newEvent.description,
+          date: eventDate,
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEvents([...events, data.event]);
+        setNewEvent({ title: "", description: "", time: "09:00" });
+        setIsDialogOpen(false);
+        toast({
+          title: "Event created",
+          description: "Your event has been scheduled successfully.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to create event",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong",
+        variant: "destructive"
+      });
+    }
   };
+
+  const selectedDateEvents = events.filter(
+    (event) => new Date(event.date).toDateString() === date?.toDateString()
+  );
 
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div>
-          <h2 className="text-3xl font-bold mb-2">Work Calendar</h2>
-          <p className="text-muted-foreground">View and manage your scheduled tasks and deadlines</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold mb-2">Calendar</h2>
+            <p className="text-muted-foreground">Manage your schedule and upcoming events</p>
+          </div>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Event
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Event</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Event Title</Label>
+                  <Input
+                    id="title"
+                    value={newEvent.title}
+                    onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                    placeholder="e.g., Team Meeting"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="time">Time</Label>
+                  <Input
+                    id="time"
+                    type="time"
+                    value={newEvent.time}
+                    onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={newEvent.description}
+                    onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                    placeholder="Event details..."
+                  />
+                </div>
+                <Button onClick={handleCreateEvent} className="w-full">
+                  Create Event
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Calendar View */}
+        <div className="grid lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5" />
-                February 2024
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-2 mb-4">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                  <div key={day} className="text-center text-sm font-medium text-muted-foreground p-2">
-                    {day}
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-2">
-                {Array.from({ length: 35 }, (_, i) => {
-                  const day = i - 2; // Adjust for calendar start
-                  const isCurrentMonth = day > 0 && day <= 29;
-                  const hasEvent = [10, 12, 15, 18, 20].includes(day);
-                  
-                  return (
-                    <div
-                      key={i}
-                      className={`aspect-square p-2 rounded-lg border text-center ${
-                        isCurrentMonth
-                          ? "border-border hover:bg-secondary cursor-pointer"
-                          : "border-transparent text-muted-foreground/30"
-                      } ${hasEvent ? "bg-primary/5 border-primary/20" : ""}`}
-                    >
-                      {isCurrentMonth && (
-                        <>
-                          <span className="text-sm font-medium">{day}</span>
-                          {hasEvent && (
-                            <div className="w-1.5 h-1.5 rounded-full bg-primary mx-auto mt-1" />
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            <CardContent className="p-6">
+              <CalendarComponent
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                className="rounded-md border shadow"
+              />
             </CardContent>
           </Card>
 
-          {/* Upcoming Events */}
           <Card>
             <CardHeader>
               <CardTitle>Upcoming Events</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {events.slice(0, 5).map((event) => (
-                  <div
-                    key={event.id}
-                    className="p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge variant="secondary" className={getTypeColor(event.type)}>
-                        {event.type}
-                      </Badge>
-                      {event.priority === "high" && (
-                        <Badge variant="destructive" className="text-xs">High</Badge>
-                      )}
+              <div className="space-y-4">
+                {selectedDateEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No events scheduled for this day
+                  </p>
+                ) : (
+                  selectedDateEvents.map((event) => (
+                    <div
+                      key={event._id}
+                      className="p-3 bg-secondary rounded-lg space-y-1"
+                    >
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-medium text-sm">{event.title}</h4>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(event.date).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {event.description}
+                      </p>
                     </div>
-                    <p className="font-medium text-sm mb-1">{event.title}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <CalendarIcon className="w-3 h-3" />
-                      <span>{event.date}</span>
-                      <Clock className="w-3 h-3 ml-1" />
-                      <span>{event.time}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
-
-        {/* All Events List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>All Scheduled Events</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {events.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-lg ${getTypeColor(event.type)} flex items-center justify-center`}>
-                      <CalendarIcon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-medium">{event.title}</p>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                        <span>{event.date}</span>
-                        <span>•</span>
-                        <span>{event.time}</span>
-                        <span>•</span>
-                        <span className="capitalize">{event.type}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Badge variant={event.priority === "high" ? "destructive" : "secondary"}>
-                    {event.priority}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   );

@@ -17,26 +17,48 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    const res = await fetch("http://localhost:5000/api/auth/login", {
-      credentials: "include",
-      method: "POST",
-      headers: {
-        'Content-Type': "application/json",
-      },
-      body: JSON.stringify({ email, password }),
-    })
+    try {
+      // Explicitly logout first to clear any existing session
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
 
-    const data = await res.json();
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        credentials: "include",
+        method: "POST",
+        headers: {
+          'Content-Type': "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    toast({
-      title: "Login status",
-      description: data.message,
-    })
-    
-    localStorage.setItem("token", data.user.id);
-    localStorage.setItem("userRole", data.user.role);
-    navigate(`/dashboard/${data.user.role}`);
-    setLoading(false);
+      const data = await res.json();
+
+      if (data.success) {
+        toast({
+          title: "Login successful",
+          description: data.message,
+        });
+        localStorage.setItem("token", data.user.id);
+        localStorage.setItem("userRole", data.user.role);
+        navigate(`/dashboard/${data.user.role}`);
+      } else {
+        toast({
+          title: "Login failed",
+          description: data.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

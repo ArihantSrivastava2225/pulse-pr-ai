@@ -43,25 +43,41 @@ const Signup = () => {
       return;
     }
 
-    const res = await fetch("http://localhost:5000/api/auth/signup", {
-      method: "POST",
-      headers: {
-        'Content-Type': "application/json",
-      },
-      body: JSON.stringify(formData),
-    })
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/signup", {
+        method: "POST",
+        headers: {
+          'Content-Type': "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    toast({
-      title: "Signup status",
-      description: data.message,
-    })
-
-    localStorage.setItem("token", data.user.id);
-    localStorage.setItem("userRole", data.user.role);
-    navigate(`/dashboard/${formData.role}`);
-    setLoading(false);
+      if (data.success) {
+        toast({
+          title: "Signup successful",
+          description: data.message,
+        });
+        localStorage.setItem("token", data.user.id); // Ideally use cookie, but for now this is fine as fallback
+        localStorage.setItem("userRole", data.user.role);
+        navigate(`/dashboard/${formData.role}`);
+      } else {
+        toast({
+          title: "Signup failed",
+          description: data.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
