@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, Minus, Newspaper, Loader2 } from "lucide-react";
 import { MassMailDialog } from "@/components/mail/MassMailDialog";
+import { AIAnalysis } from "@/components/insights/AIAnalysis";
 
 const Insights = () => {
   const [loading, setLoading] = useState(true);
@@ -98,8 +99,8 @@ const Insights = () => {
                 </div>
                 <p className="text-3xl font-bold mb-1">{stat.value}</p>
                 <p className={`text-sm font-medium ${stat.trend === "up" ? "text-success" :
-                    stat.trend === "down" ? "text-destructive" :
-                      "text-muted-foreground"
+                  stat.trend === "down" ? "text-destructive" :
+                    "text-muted-foreground"
                   }`}>
                   {stat.change} from last week
                 </p>
@@ -107,6 +108,9 @@ const Insights = () => {
             </Card>
           ))}
         </div>
+
+        {/* AI Analysis Section */}
+        <AIAnalysis />
 
         {/* AI Summary */}
         <Card>
