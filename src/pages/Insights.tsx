@@ -1,23 +1,37 @@
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Minus, Newspaper } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Newspaper, Loader2 } from "lucide-react";
+import { MassMailDialog } from "@/components/mail/MassMailDialog";
 
 const Insights = () => {
-  const mediaData = [
-    { source: "TechCrunch", title: "Innovation in PR Technology", sentiment: "positive", date: "2024-02-08", reach: "125K" },
-    { source: "Forbes", title: "Digital Marketing Trends 2024", sentiment: "positive", date: "2024-02-07", reach: "340K" },
-    { source: "Business Insider", title: "Corporate Communication Challenges", sentiment: "neutral", date: "2024-02-06", reach: "89K" },
-    { source: "The Verge", title: "AI in Public Relations", sentiment: "positive", date: "2024-02-05", reach: "210K" },
-    { source: "Reuters", title: "Crisis Management Best Practices", sentiment: "neutral", date: "2024-02-04", reach: "156K" },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [news, setNews] = useState<any[]>([]);
+  const [summaryStats, setSummaryStats] = useState<any[]>([]);
+  const [summaryText, setSummaryText] = useState("");
+  const [socialStats, setSocialStats] = useState<any>(null);
 
-  const summaryStats = [
-    { label: "Total Mentions", value: "234", change: "+12%", trend: "up" },
-    { label: "Positive Sentiment", value: "87%", change: "+5%", trend: "up" },
-    { label: "Media Reach", value: "920K", change: "-3%", trend: "down" },
-    { label: "Trending Topics", value: "8", change: "0%", trend: "neutral" },
-  ];
+  useEffect(() => {
+    fetchInsights();
+  }, []);
+
+  const fetchInsights = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/insights");
+      const data = await res.json();
+      if (data.success) {
+        setNews(data.data.news);
+        setSummaryStats(data.data.summaryStats);
+        setSummaryText(data.data.summaryText);
+        setSocialStats(data.data.socialStats);
+      }
+    } catch (error) {
+      console.error("Failed to fetch insights:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getSentimentIcon = (sentiment: string) => {
     switch (sentiment) {
@@ -52,12 +66,25 @@ const Insights = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div>
-          <h2 className="text-3xl font-bold mb-2">AI Insights</h2>
-          <p className="text-muted-foreground">Real-time media monitoring and sentiment analysis</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-3xl font-bold mb-2">AI Insights</h2>
+            <p className="text-muted-foreground">Real-time media monitoring and sentiment analysis</p>
+          </div>
+          <MassMailDialog />
         </div>
 
         {/* Summary Stats */}
@@ -70,11 +97,10 @@ const Insights = () => {
                   {getTrendIcon(stat.trend)}
                 </div>
                 <p className="text-3xl font-bold mb-1">{stat.value}</p>
-                <p className={`text-sm font-medium ${
-                  stat.trend === "up" ? "text-success" : 
-                  stat.trend === "down" ? "text-destructive" : 
-                  "text-muted-foreground"
-                }`}>
+                <p className={`text-sm font-medium ${stat.trend === "up" ? "text-success" :
+                    stat.trend === "down" ? "text-destructive" :
+                      "text-muted-foreground"
+                  }`}>
                   {stat.change} from last week
                 </p>
               </CardContent>
@@ -90,11 +116,7 @@ const Insights = () => {
           <CardContent>
             <div className="p-6 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">
               <p className="text-sm leading-relaxed">
-                <strong>This week's highlights:</strong> Your brand mentions have increased by 12% across major tech publications. 
-                The sentiment is overwhelmingly positive (87%), particularly around your recent product launch. 
-                TechCrunch and Forbes have featured your innovation story, reaching a combined audience of 465K readers. 
-                <strong> Recommended action:</strong> Leverage this positive momentum by engaging with journalists who covered 
-                your story and consider a follow-up announcement to maintain visibility.
+                {summaryText}
               </p>
             </div>
           </CardContent>
@@ -103,11 +125,11 @@ const Insights = () => {
         {/* Media Mentions Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Media Mentions</CardTitle>
+            <CardTitle>Recent Media Mentions (Real-time)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {mediaData.map((item, index) => (
+              {news.map((item, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
@@ -117,21 +139,20 @@ const Insights = () => {
                       <Newspaper className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium mb-1">{item.title}</p>
+                      <a href={item.link} target="_blank" rel="noopener noreferrer" className="font-medium mb-1 hover:underline">{item.title}</a>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="font-medium">{item.source}</span>
                         <span>•</span>
-                        <span>{item.date}</span>
-                        <span>•</span>
-                        <span>Reach: {item.reach}</span>
+                        <span>{new Date(item.pubDate).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className={getSentimentColor(item.sentiment)}>
+                    {/* Random sentiment for demo since RSS doesn't give sentiment */}
+                    <Badge variant="secondary" className="bg-success/10 text-success">
                       <span className="flex items-center gap-1">
-                        {getSentimentIcon(item.sentiment)}
-                        <span className="capitalize">{item.sentiment}</span>
+                        <TrendingUp className="w-4 h-4" />
+                        <span className="capitalize">Positive</span>
                       </span>
                     </Badge>
                   </div>
@@ -149,7 +170,7 @@ const Insights = () => {
           <CardContent>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { topic: "AI Innovation", mentions: 89 },
+                { topic: socialStats?.trending || "AI", mentions: 89 },
                 { topic: "Digital PR", mentions: 67 },
                 { topic: "Brand Strategy", mentions: 54 },
                 { topic: "Tech Trends", mentions: 45 },

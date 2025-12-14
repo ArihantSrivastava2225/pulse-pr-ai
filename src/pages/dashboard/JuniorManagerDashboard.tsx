@@ -306,8 +306,11 @@ const JuniorManagerDashboard = () => {
               </p>
               <div className="space-y-3">
                 <div className="p-3 rounded-lg bg-background">
-                  <p className="font-medium text-sm mb-1">Trending Topic: Tech Innovation</p>
-                  <p className="text-xs text-muted-foreground">87% positive sentiment • 234 mentions</p>
+                  <p className="font-medium text-sm mb-1">Latest News</p>
+                  <p className="text-xs text-muted-foreground">
+                    {/* In a real app, we'd fetch this. For now, linking to the main Insights page */}
+                    Check the full AI Insights page for real-time updates from TechCrunch and The Verge.
+                  </p>
                 </div>
                 <div className="p-3 rounded-lg bg-background">
                   <p className="font-medium text-sm mb-1">Recommended Action: Increase social presence</p>
